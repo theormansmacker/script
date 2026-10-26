@@ -1,0 +1,2026 @@
+--!nonstrict
+--[[
+	╔══════════════════════════════════════════════════╗
+	║                                                  ║
+	║            R O B S C R I P T . C O M             ║
+	║                                                  ║
+	╚══════════════════════════════════════════════════╝
+
+	Fake an Egg Hub (Anti-Detect & Tween Safeguards Edition)
+	--------------------------------------------------------
+	Egg farming, pet stealing, rebirth and fake-egg ESP:
+
+	  1. Farm   - buys the best egg, carries it home, hatches it
+	  2. Steal  - takes the heaviest pet from another pen (Tween or Instant)
+	  3. Auto   - rebirth, pen upgrade, disguise, equip best
+	  4. ESP    - highlights the players hiding as eggs
+
+	RightControl shows or hides the window. The language switches in Settings.
+]]
+
+----------------------------------------------------------------------
+-- UI library
+----------------------------------------------------------------------
+
+local UI_SOURCES = {
+	"https://raw.githubusercontent.com/bobloscript/Robly_Airflow/main/Source.luau",
+	"https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/refs/heads/main/Source.luau",
+}
+
+local Airflow = getgenv().__FakeEggLibrary
+if type(Airflow) ~= "table" then
+	for _, url in ipairs(UI_SOURCES) do
+		local ok, lib = pcall(function()
+			return loadstring(game:HttpGet(url))()
+		end)
+		if ok and type(lib) == "table" and type(lib.CreateWindow) == "function" then
+			Airflow = lib
+			break
+		end
+	end
+end
+if not Airflow then
+	error("[RobScript.com] The UI library could not be loaded. Check your connection and retry.")
+end
+getgenv().__FakeEggLibrary = Airflow
+
+----------------------------------------------------------------------
+-- Services
+----------------------------------------------------------------------
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local SelectionBox = Instance.new("SelectionBox")
+
+local LocalPlayer = Players.LocalPlayer
+
+local Remotes = ReplicatedStorage:WaitForChild("RemoteEvents", 30)
+local EggEvent = ReplicatedStorage:WaitForChild("EggRemotes"):WaitForChild("EggEvent", 30)
+if not (Remotes and EggEvent) then
+	error("[RobScript.com] This script only works in Fake an Egg.")
+end
+
+local Eggs = require(ReplicatedStorage:WaitForChild("Eggs"))
+local Animals = require(ReplicatedStorage:WaitForChild("Animals"))
+local Rebirth = require(ReplicatedStorage:WaitForChild("Rebirth"))
+local Scanners = require(ReplicatedStorage:WaitForChild("Scanners"))
+local Food = require(ReplicatedStorage:WaitForChild("Food"))
+
+----------------------------------------------------------------------
+-- Language
+----------------------------------------------------------------------
+
+local TEXT = {
+	ru = {
+		window = "Fake an Egg Hub",
+		subtitle = "яйца, питомцы, ребёрс",
+		home = "Главная",
+		logs = "Журнал",
+		logBox = "Что делает",
+		logName = "Действия",
+		logEmpty = "Пока пусто",
+		farmOn = "Ферма вкл",
+		farmOff = "Ферма выкл",
+		stealOn = "Кража вкл",
+		stealOff = "Кража выкл",
+		protectOn = "Защита вкл",
+		protectOff = "Защита выкл",
+		rebirthOn = "Ребёрс вкл",
+		rebirthOff = "Ребёрс выкл",
+		espOn = "ESP вкл",
+		espOff = "ESP выкл",
+		logHatched = "Вылупил: <Accent>%s</Accent>",
+		logBuy = "Покупаю <Accent>%s</Accent> за $%d",
+		logBought = "<Success>Куплено</Success>: %s",
+		logStolen = "Краду <Accent>%s</Accent> (вес %d)",
+		logRebirth = "<Success>Ребёрс</Success> (было %d)",
+		logPipe = "Залез в трубу",
+		logShop = "Купил <Accent>%s</Accent> за $%d",
+		logSold = "Продал <Accent>%s</Accent> (вес %d)",
+		protectState = "защита",
+		tabFarm = "Ферма",
+		tabSteal = "Кража",
+		tabAuto = "Авто",
+		tabVisual = "ESP",
+		tabSettings = "Настройки",
+		farm = "Ферма яиц",
+		farmDesc = "Покупает яйцо, несёт в гнездо и вылупляет",
+		onlyBetter = "Только лучше текущих",
+		onlyBetterDesc = "Не покупает яйца слабее лучшего питомца в пене",
+		maxPrice = "Максимальная цена",
+		maxPriceDesc = "Не тратить больше этой суммы на яйцо",
+		maxPriceEnabled = "Ограничить цену яиц",
+		maxPriceEnabledDesc = "Выкл — покупать без лимита цены",
+		skipFake = "Только настоящие яйца",
+		skipFakeDesc = "Пропускает фейковые яйца, в которых прячется игрок",
+		skipFakeWarn = "Не выключай: покупка фейкового яйца платит спрятавшемуся игроку и не даёт тебе ничего.",
+		autoHatch = "Авто-вылупление",
+		autoHatchDesc = "Жмёт Hatch на каждом яйце, у которого вышел таймер",
+		eggNames = "Какие яйца покупать",
+		eggNamesDesc = "Пусто - любые",
+		eggRarities = "Редкости",
+		eggRaritiesDesc = "Пусто - любые",
+		equipInterval = "Лучший питомец каждые",
+		equipIntervalDesc = "Как часто нажимать кнопку лучшего питомца",
+		tabRebirth = "Ферма ребёрса",
+		rebirthFarm = "Фарм яиц под ребёрс",
+		rebirthFarmDesc = "Покупает только яйцо, которое просит следующий ребёрс",
+		rebirthReal = "Только настоящие яйца",
+		rebirthRealDesc = "Фейковые яйца всегда пропускаются. При включении ферма также активирует авто-ребёрс.",
+		rebirthNeed = "Нужно",
+		rebirthDone = "условие выполнено",
+		rebirthNone = "нет требования",
+		rebirthFarming = "фармлю под ребёрс",
+		steal = "Авто-кража",
+		stealDesc = "Идёт в чужой пен и уносит питомца",
+		stealMode = "Режим кражи",
+		stealModeDesc = "Выберите способ передвижения при краже",
+		tweenSpeed = "Скорость полета (Tween)",
+		tweenSpeedDesc = "Скорость перемещения к питомцу (меньше = плавнее/безопаснее)",
+		minWeight = "Минимальный вес",
+		minWeightDesc = "Ниже этого веса питомцев не трогать",
+		returnHome = "Возвращаться домой",
+		returnHomeDesc = "После кражи бежит назад в свой пен",
+		rebirth = "Авто-ребёрс",
+		rebirthDesc = "Жмёт ребёрс, когда условия выполнены",
+		upgrade = "Апгрейд пена",
+		upgradeDesc = "Покупает улучшение базы, когда хватает денег",
+		disguise = "Авто-маскировка",
+		disguiseDesc = "Залезает в трубу и становится яйцом",
+		equipBest = "Ставить лучшего питомца",
+		equipBestDesc = "Жмёт «лучший питомец» в слотах",
+		protect = "Защита",
+		protectDesc = "Не крадёт и не уходит с базы — питомцы остаются дома",
+		esp = "ESP фейковых яиц",
+		espDesc = "Подсвечивает игроков, которые притворяются яйцом",
+		espNames = "Показывать имена",
+		espNamesDesc = "Подпись над головой фейка",
+		lang = "Язык",
+		langDesc = "Русский или English",
+		cash = "Деньги",
+		best = "Лучший питомец",
+		state = "Состояние",
+		pes = "Питомцев в пене",
+		fakes = "Фейков найдено",
+		eggsBought = "Яиц куплено",
+		hatched = "Вылуплено",
+		stolen = "Украдено",
+		idle = "жду",
+		farming = "несу яйцо",
+		buying = "покупаю",
+		hatching = "вылупляю",
+		stealing = "краду",
+		noMoney = "нет денег",
+		full = "пен полон",
+		noEgg = "нет подходящих яиц",
+		noTarget = "нет цели",
+		ready = "готово",
+		hotkeys = "Горячие клавиши",
+		hotkeysText = "RightControl — показать или скрыть окно",
+		tabShops = "Магазины",
+		tabSell = "Продажа",
+		buyScanners = "Авто-покупка сканеров",
+		buyScannersDesc = "Берёт лучший сканер в наличии, на который хватает денег",
+		buyFood = "Авто-покупка еды",
+		buyFoodDesc = "Берёт лучшую еду в наличии, на который хватает денег",
+		shopTypes = "Типы",
+		shopTypesDesc = "Пусто — любые",
+		shopMax = "Лимит цены",
+		shopMaxDesc = "Не тратить на одну покупку больше этой суммы",
+		shopNothing = "нет в наличии",
+		shopBought = "куплено",
+		autoSell = "Авто-продажа петов",
+		autoSellDesc = "Продаёт петов по фильтрам у стенда Sell",
+		sellNames = "Каких петов продавать",
+		sellNamesDesc = "Пусто — любых",
+		sellRarities = "Какие редкости продавать",
+		sellRaritiesDesc = "Пусто — любых",
+		sellUnder = "Продавать легче веса",
+		sellUnderDesc = "0 — без ограничения по весу",
+		keepBest = "Не продавать лучшего",
+		keepBestDesc = "Самый тяжёлый питомец остаётся",
+		sellEvery = "Продавать каждые",
+		sellEveryDesc = "Пауза между продажами",
+		sold = "Продано",
+		sellNone = "нечего продавать",
+	},
+	en = {
+		window = "Fake an Egg Hub",
+		subtitle = "eggs, pets, rebirth",
+		home = "Home",
+		logs = "Logs",
+		logBox = "What it does",
+		logName = "Actions",
+		logEmpty = "Nothing yet",
+		farmOn = "Farm on",
+		farmOff = "Farm off",
+		stealOn = "Steal on",
+		stealOff = "Steal off",
+		protectOn = "Protect on",
+		protectOff = "Protect off",
+		rebirthOn = "Rebirth on",
+		rebirthOff = "Rebirth off",
+		espOn = "ESP on",
+		espOff = "ESP off",
+		logHatched = "Hatched: <Accent>%s</Accent>",
+		logBuy = "Buying <Accent>%s</Accent> for $%d",
+		logBought = "<Success>Bought</Success>: %s",
+		logStolen = "Stealing <Accent>%s</Accent> (weight %d)",
+		logRebirth = "<Success>Rebirth</Success> (was %d)",
+		logPipe = "Jumped into the pipe",
+		logShop = "Bought <Accent>%s</Accent> for $%d",
+		logSold = "Sold <Accent>%s</Accent> (weight %d)",
+		protectState = "protect",
+		tabFarm = "Farm",
+		tabSteal = "Steal",
+		tabAuto = "Auto",
+		tabVisual = "ESP",
+		tabSettings = "Settings",
+		farm = "Auto farm",
+		farmDesc = "Buys an egg, carries it home and hatches it",
+		onlyBetter = "Only better eggs",
+		onlyBetterDesc = "Skips eggs weaker than your best pet",
+		maxPrice = "Max price",
+		maxPriceDesc = "Never spend more than this on one egg",
+		maxPriceEnabled = "Limit egg price",
+		maxPriceEnabledDesc = "Off — buy eggs with no price limit",
+		skipFake = "Real eggs only",
+		skipFakeDesc = "Skips fake eggs - the ones with a player hiding inside",
+		skipFakeWarn = "Keep this on: a fake egg pays the player hiding in it and gives you nothing.",
+		autoHatch = "Auto hatch eggs",
+		autoHatchDesc = "Presses Hatch on every egg whose timer has finished",
+		eggNames = "Eggs to buy",
+		eggNamesDesc = "Empty means every egg",
+		eggRarities = "Rarities",
+		eggRaritiesDesc = "Empty means every rarity",
+		equipInterval = "Equip best every",
+		equipIntervalDesc = "How often the best-pet button is pressed",
+		tabRebirth = "Rebirth farm",
+		rebirthFarm = "Farm eggs for rebirth",
+		rebirthFarmDesc = "Buys only the egg the next rebirth asks for",
+		rebirthReal = "Real eggs only",
+		rebirthRealDesc = "Fake eggs are always skipped. Turning this farm on also enables Auto rebirth.",
+		rebirthNeed = "Needs",
+		rebirthDone = "requirement met",
+		rebirthNone = "no requirement",
+		rebirthFarming = "farming for rebirth",
+		steal = "Auto steal",
+		stealDesc = "Runs into another pen and takes a pet",
+		stealMode = "Steal Mode",
+		stealModeDesc = "Choose movement method for stealing",
+		tweenSpeed = "Tween Speed",
+		tweenSpeedDesc = "Speed of flight to target (lower = smoother/safer)",
+		minWeight = "Min weight",
+		minWeightDesc = "Pets below this weight are left alone",
+		returnHome = "Run home",
+		returnHomeDesc = "Carries the stolen pet back to your pen",
+		rebirth = "Auto rebirth",
+		rebirthDesc = "Presses rebirth when the requirements are met",
+		upgrade = "Pen upgrade",
+		upgradeDesc = "Buys the base upgrade when there is enough cash",
+		disguise = "Auto disguise",
+		disguiseDesc = "Jumps into the pipe and becomes an egg",
+		equipBest = "Equip best pet",
+		equipBestDesc = "Uses the best-pet button in the slots",
+		protect = "Protect mode",
+		protectDesc = "No stealing and no leaving the base, pets stay home",
+		esp = "Fake egg ESP",
+		espDesc = "Highlights players pretending to be an egg",
+		espNames = "Show names",
+		espNamesDesc = "Draws a name tag above the fake",
+		lang = "Language",
+		langDesc = "Русский или English",
+		cash = "Cash",
+		best = "Best pet",
+		state = "State",
+		pes = "Pets in pen",
+		fakes = "Fakes found",
+		eggsBought = "Eggs bought",
+		hatched = "Hatched",
+		stolen = "Stolen",
+		idle = "idle",
+		farming = "carrying",
+		buying = "buying",
+		hatching = "hatching",
+		stealing = "stealing",
+		noMoney = "no money",
+		full = "pen full",
+		noEgg = "no fitting eggs",
+		noTarget = "no target",
+		ready = "ready",
+		hotkeys = "Hotkeys",
+		hotkeysText = "RightControl shows or hides the window",
+		tabShops = "Shops",
+		tabSell = "Sell",
+		buyScanners = "Auto buy scanners",
+		buyScannersDesc = "Buys the best scanner in stock you can afford",
+		buyFood = "Auto buy pet food",
+		buyFoodDesc = "Buys the best food in stock you can afford",
+		shopTypes = "Types",
+		shopTypesDesc = "Empty means every type",
+		shopMax = "Shop price limit",
+		shopMaxDesc = "Never spend more than this on one purchase",
+		shopNothing = "nothing in stock",
+		shopBought = "bought",
+		autoSell = "Auto sell pets",
+		autoSellDesc = "Sells pets that match the filters at the Sell stand",
+		sellNames = "Pets to sell",
+		sellNamesDesc = "Empty means every pet",
+		sellRarities = "Rarities to sell",
+		sellRaritiesDesc = "Empty means every rarity",
+		sellUnder = "Sell under weight",
+		sellUnderDesc = "0 means no weight limit",
+		keepBest = "Keep the best pet",
+		keepBestDesc = "Never sells your heaviest pet",
+		sellEvery = "Sell every",
+		sellEveryDesc = "Delay between sales",
+		sold = "Sold",
+		sellNone = "nothing to sell",
+	},
+}
+
+----------------------------------------------------------------------
+-- Settings
+----------------------------------------------------------------------
+
+local Settings = {
+	farm = false,
+	onlyBetter = false,
+	maxPriceEnabled = false,
+	maxPrice = 1000000000000,
+	skipFake = true,
+	autoHatch = true,
+	eggNames = {},
+	eggRarities = {},
+	rebirthFarm = false,
+	buyScanners = false,
+	buyFood = false,
+	scannerTypes = {},
+	foodTypes = {},
+	shopMax = 5000000,
+	autoSell = false,
+	sellNames = {},
+	sellRarities = {},
+	sellUnder = 0,
+	keepBest = true,
+	sellEvery = 2,
+	steal = false,
+	stealMode = "Tween", -- "Tween" or "Instant"
+	tweenSpeed = 150, -- studs per second (lower is safer)
+	minWeight = 1000,
+	returnHome = true,
+	rebirth = false,
+	upgrade = false,
+	disguise = false,
+	equipBest = false,
+	equipInterval = 5,
+	protect = false,
+	esp = false,
+	espNames = true,
+	lang = "en",
+}
+
+local T = TEXT[Settings.lang]
+
+local Window, Log
+local UiRefs = {}
+local stats = {
+	bought = 0,
+	hatched = 0,
+	stolen = 0,
+	fakes = 0,
+	scanners = 0,
+	food = 0,
+	sold = 0,
+}
+local state = {
+	text = "idle",
+	egg = nil,
+	target = nil,
+	shop = { scanner = T.shopNothing, food = T.shopNothing },
+	sell = T.sellNone,
+}
+
+local function log(message)
+	if Log then
+		Log:Push(tostring(message))
+	end
+end
+
+getgenv().__FakeEggGen = (getgenv().__FakeEggGen or 0) + 1
+local SCRIPT_GENERATION = getgenv().__FakeEggGen
+
+local function scriptAlive()
+	return getgenv().__FakeEggGen == SCRIPT_GENERATION
+end
+
+----------------------------------------------------------------------
+-- Anti-Detect & Safe Teleport/Movement Safeguards
+----------------------------------------------------------------------
+
+local function character()
+	local char = LocalPlayer.Character
+	if char and char.Parent then
+		return char
+	end
+	return nil
+end
+
+local function rootPart()
+	local char = character()
+	return char and char:FindFirstChild("HumanoidRootPart") or nil
+end
+
+-- Anti-ban safe humanized check & jitter wrapper
+local function safeWait(seconds)
+	task.wait(seconds + math.random(10, 40) / 1000)
+end
+
+-- Humanized Safe Movement (Tween Flight with Velocity & Streamline Safeguards)
+local function safeMoveTo(targetPosition, speed)
+	local hrp = rootPart()
+	if not hrp or typeof(targetPosition) ~= "Vector3" then
+		return false
+	end
+
+	-- If using instant move mode or speed is extremely high, do safe direct CFrame
+	if Settings.stealMode == "Instant" or not speed or speed >= 500 then
+		hrp.CFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0))
+		return true
+	end
+
+	local startPos = hrp.Position
+	local distance = (targetPosition - startPos).Magnitude
+	local duration = math.clamp(distance / speed, 0.1, 4.0)
+
+	-- Disable physics/gravity interference safely during tween flight to prevent rubberbanding/flags
+	local oldAnchored = hrp.Anchored
+	hrp.Anchored = true
+
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local goal = { CFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0)) }
+	local tween = TweenService:Create(hrp, tweenInfo, goal)
+
+	tween:Play()
+	
+	local completed = false
+	local connection
+	connection = tween.Completed:Connect(function()
+		completed = true
+		if connection then connection:Disconnect() end
+	end)
+
+	local startTime = os.clock()
+	while not completed and (os.clock() - startTime) < (duration + 1) do
+		task.wait()
+	end
+
+	hrp.Anchored = oldAnchored
+	return true
+end
+
+local function teleport(position)
+	return safeMoveTo(position, Settings.stealMode == "Tween" and Settings.tweenSpeed or 1000)
+end
+
+local function promptPosition(prompt)
+	local parent = prompt and prompt.Parent
+	if not parent then
+		return nil
+	end
+	if parent:IsA("Attachment") then
+		return parent.WorldPosition
+	end
+	if parent:IsA("BasePart") then
+		return parent.Position
+	end
+	return parent:GetPivot().Position
+end
+
+local function firePrompt(prompt)
+	if not prompt or not prompt.Parent then
+		return false
+	end
+	local ok = pcall(function()
+		if not prompt.Enabled then
+			prompt.Enabled = true
+		end
+		fireproximityprompt(prompt)
+	end)
+	return ok
+end
+
+local function myBase()
+	local index = LocalPlayer:GetAttribute("Base")
+	if not index then
+		return nil
+	end
+	return workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(tostring(index)) or nil
+end
+
+local function cash()
+	local stats = LocalPlayer:FindFirstChild("leaderstats")
+	local value = stats and stats:FindFirstChild("Cash")
+	return value and value.Value or 0
+end
+
+local function rebirths()
+	local stats = LocalPlayer:FindFirstChild("leaderstats")
+	local value = stats and stats:FindFirstChild("Rebirths")
+	return value and value.Value or 0
+end
+
+local function mySlots()
+	local folder = LocalPlayer:FindFirstChild("Slots")
+	return folder and folder:GetChildren() or {}
+end
+
+local function bestOwnWeight()
+	local best = 0
+	for _, slot in ipairs(mySlots()) do
+		local weight = slot:GetAttribute("Weight")
+		if weight and weight > best then
+			best = weight
+		end
+	end
+	return best
+end
+
+local function petWeight(name)
+	local animal = name and Animals[name]
+	return animal and animal.weight or 0
+end
+
+local function freeNest()
+	local base = myBase()
+	local slots = LocalPlayer:FindFirstChild("Nests")
+	if not (base and slots) then
+		return nil
+	end
+	local nests = base:FindFirstChild("Nests")
+	if not nests then
+		return nil
+	end
+	for _, nest in ipairs(nests:GetChildren()) do
+		local slot = slots:FindFirstChild(nest.Name)
+		if slot and slot:GetAttribute("Owned") and not slot:GetAttribute("Egg") then
+			return nest
+		end
+	end
+	return nil
+end
+
+local function isOn(key)
+	local ref = UiRefs[key]
+	if ref then
+		local ok, value = pcall(function()
+			return ref:Get()
+		end)
+		if ok then
+			return value == true
+		end
+	end
+	return Settings[key] == true
+end
+
+local function isRealEgg(model)
+	if not model or not model.Parent then
+		return false
+	end
+	if model:GetAttribute("Owner") ~= nil then
+		return false
+	end
+	if not model:GetAttribute("IsEgg") or not model:GetAttribute("BaseName") then
+		return false
+	end
+	if not model:GetAttribute("CountdownEnd") then
+		return false
+	end
+	for _, child in ipairs(model:GetDescendants()) do
+		if child:IsA("Humanoid") or child:IsA("Player") then
+			return false
+		end
+	end
+	return true
+end
+
+local function rebirthAnimal()
+	local ok, data = pcall(Rebirth.getNext, rebirths())
+	if ok and type(data) == "table" then
+		return data.animal
+	end
+	return nil
+end
+
+local function eggNameList()
+	local out, seen = {}, {}
+	for _, info in pairs(Eggs.ByName) do
+		local name = info.name
+		if name and not seen[name] then
+			seen[name] = true
+			table.insert(out, name)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+local function eggRarityList()
+	local out, seen = {}, {}
+	for _, info in pairs(Eggs.ByName) do
+		local rarity = info.rarityType
+		if rarity and not seen[rarity] then
+			seen[rarity] = true
+			table.insert(out, rarity)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+----------------------------------------------------------------------
+-- 1. FARM
+----------------------------------------------------------------------
+
+local hatchCooldown = {}
+local hatchedLogged = {}
+local buyBlocked = {}
+
+local function pickEgg(mode)
+	local best, bestScore = nil, -1
+	local money = cash()
+	local bestWeight = bestOwnWeight()
+	local now = os.clock()
+	local wanted = mode == "rebirth" and rebirthAnimal() or nil
+	local names = Settings.eggNames
+	local rarities = Settings.eggRarities
+	local realOnly = mode == "rebirth" or isOn("skipFake")
+
+	for _, prompt in ipairs(workspace:GetDescendants()) do
+		if prompt:IsA("ProximityPrompt") and prompt.ActionText == "Buy" and prompt.Parent and prompt.Enabled then
+			local model = prompt.Parent
+			local eggName = model:GetAttribute("BaseName")
+			local info = eggName and Eggs.ByName[eggName]
+			local blockedUntil = buyBlocked[prompt]
+			local real = isRealEgg(model)
+			if info and info.price <= money
+				and (not Settings.maxPriceEnabled or info.price <= Settings.maxPrice)
+				and not (blockedUntil and blockedUntil > now)
+				and (real or not realOnly) then
+				local petName = info.pet or info.name
+				local allowed = true
+				if wanted and petName ~= wanted then
+					allowed = false
+				end
+				if allowed and names and next(names) and not names[eggName] then
+					allowed = false
+				end
+				if allowed and rarities and next(rarities) and not rarities[info.rarityType or "Common"] then
+					allowed = false
+				end
+				local weight = petWeight(petName)
+				local score = info.rarity or 0
+				if allowed and (mode == "rebirth" or not Settings.onlyBetter or weight > bestWeight) then
+					if score > bestScore then
+						best, bestScore = {
+							prompt = prompt,
+							info = info,
+							weight = weight,
+							price = info.price,
+							real = real,
+						}, score
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function hatchReady()
+	local now = workspace:GetServerTimeNow()
+	local eggs = workspace:FindFirstChild("NestEggs")
+	if not eggs then
+		return
+	end
+	for _, model in ipairs(eggs:GetChildren()) do
+		if model:GetAttribute("Owner") == LocalPlayer.Name and (hatchCooldown[model] or 0) < now then
+			local prompt
+			for _, child in ipairs(model:GetDescendants()) do
+				if child:IsA("ProximityPrompt") and child.ActionText == "Hatch" then
+					prompt = child
+					break
+				end
+			end
+			if prompt and prompt.Enabled then
+				hatchCooldown[model] = now + 2
+				local position = model:GetPivot().Position
+				if teleport(position + Vector3.new(0, -1, 3)) then
+					safeWait(0.12)
+					if firePrompt(prompt) then
+						state.text = T.hatching
+						stats.hatched += 1
+						log(string.format(T.logHatched, tostring(model:GetAttribute("BaseName"))))
+					end
+				end
+				return true
+			end
+		end
+	end
+end
+
+local function farmStep(mode)
+	mode = mode or "normal"
+
+	if LocalPlayer:GetAttribute("Carrying") then
+		local nest = freeNest()
+		if nest then
+			teleport(nest:GetPivot().Position)
+			state.text = mode == "rebirth" and T.rebirthFarming or T.farming
+		else
+			state.text = T.full
+		end
+		return
+	end
+
+	if not freeNest() then
+		state.text = T.full
+		return
+	end
+
+	if state.pendingPrompt then
+		if os.clock() - (state.pendingAt or 0) > 1.5 then
+			buyBlocked[state.pendingPrompt] = os.clock() + 20
+			state.pendingPrompt = nil
+			state.text = T.noEgg
+		end
+		return
+	end
+
+	local egg = pickEgg(mode)
+	if not egg then
+		if mode == "rebirth" then
+			state.text = rebirthAnimal() and T.noEgg or T.rebirthNone
+		else
+			state.text = cash() < 100 and T.noMoney or T.noEgg
+		end
+		return
+	end
+
+	state.text = mode == "rebirth" and T.rebirthFarming or T.buying
+	local position = promptPosition(egg.prompt)
+	if position and teleport(position) then
+		safeWait(0.15)
+		if firePrompt(egg.prompt) then
+			state.pendingPrompt = egg.prompt
+			state.pendingAt = os.clock()
+			state.egg = egg.info.displayName or egg.info.name
+			log(string.format(T.logBuy, tostring(state.egg), egg.price))
+		end
+	end
+end
+
+local function confirmBuy()
+	if state.pendingPrompt and LocalPlayer:GetAttribute("Carrying") then
+		state.pendingPrompt = nil
+		stats.bought += 1
+		log(string.format(T.logBought, tostring(state.egg)))
+	end
+end
+
+----------------------------------------------------------------------
+-- 2. STEAL (With Tween / Instant Mode & Anti-Detect Safeguards)
+----------------------------------------------------------------------
+
+local stealCooldown = 0
+
+local function pickStolenPet()
+	local best, bestWeight = nil, Settings.minWeight
+	local me = LocalPlayer.Name
+	local bases = workspace:FindFirstChild("Bases")
+	if not bases then
+		return nil
+	end
+	for _, base in ipairs(bases:GetChildren()) do
+		if base:GetAttribute("Owner") and base:GetAttribute("Owner") ~= me then
+			for _, pet in ipairs(base:GetChildren()) do
+				local petName = pet.Name
+				local weight = petWeight(petName)
+				if pet:IsA("Model") and weight > bestWeight then
+					for _, child in ipairs(pet:GetDescendants()) do
+						if child:IsA("ProximityPrompt") and child.ActionText == "Steal" then
+							best, bestWeight = { prompt = child, pet = pet, base = base, name = petName, weight = weight }, weight
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function stealStep()
+	local now = os.clock()
+	if now < stealCooldown then
+		return
+	end
+	if LocalPlayer:GetAttribute("Carrying") then
+		local nest = freeNest()
+		if nest then
+			teleport(nest:GetPivot().Position)
+			state.text = T.farming
+		end
+		return
+	end
+
+	local target = pickStolenPet()
+	if not target then
+		state.text = T.noTarget
+		return
+	end
+
+	state.text = T.stealing
+	local position = promptPosition(target.prompt)
+	if position and teleport(position) then
+		safeWait(0.2)
+		local fired = firePrompt(target.prompt)
+		if not fired then
+			local owner = target.base:GetAttribute("Owner")
+			local player = owner and Players:FindFirstChild(owner)
+			if player then
+				pcall(function()
+					Remotes.StealEvent:FireServer(player.UserId, target.pet.Name)
+				end)
+				fired = true
+			end
+		end
+		if fired then
+			stats.stolen += 1
+			stealCooldown = now + math.random(15, 30) / 10 -- Randomized humanized cooldown anti-detect buffer
+			log(string.format(T.logStolen, target.name, target.weight))
+			if Settings.returnHome then
+				local base = myBase()
+				if base then
+					teleport(base.Spawn.Position)
+				end
+			end
+		end
+	end
+end
+
+----------------------------------------------------------------------
+-- 3. SHOPS AND SELLING
+----------------------------------------------------------------------
+
+local scannerCooldown, foodCooldown, sellCooldown = 0, 0, 0
+local shopPending = { scanner = nil, food = nil }
+local sellPending = nil
+
+local function shopPosition(name)
+	local map = workspace:FindFirstChild("Map")
+	local model = map and map:FindFirstChild(name)
+	return model and model:GetPivot().Position or nil
+end
+
+local function itemNameList(module)
+	local out = {}
+	for _, item in ipairs(module.List) do
+		table.insert(out, item.name)
+	end
+	table.sort(out)
+	return out
+end
+
+local function petNameList()
+	local out = {}
+	for name, info in pairs(Animals) do
+		if type(name) == "string" and type(info) == "table" and info.weight and info.rarityType then
+			table.insert(out, name)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+local function petRarityList()
+	local out, seen = {}, {}
+	for _, info in pairs(Animals) do
+		if type(info) == "table" and info.weight and info.rarityType and not seen[info.rarityType] then
+			seen[info.rarityType] = true
+			table.insert(out, info.rarityType)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+local function selectedOptions(map)
+	local out = {}
+	for name, selected in pairs(map or {}) do
+		if selected then
+			table.insert(out, name)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+local function shopStock(kind, name)
+	local module = kind == "scanner" and Scanners or Food
+	local ok, stock = pcall(module.stock, LocalPlayer, name)
+	if ok and type(stock) == "number" then
+		return stock
+	end
+	local prefix = kind == "scanner" and "Stock" or "FoodStock"
+	return LocalPlayer:GetAttribute(prefix .. name) or 0
+end
+
+local function bestShopItem(kind)
+	local module = kind == "scanner" and Scanners or Food
+	local chosen = kind == "scanner" and Settings.scannerTypes or Settings.foodTypes
+	local filterOn = chosen and next(chosen) ~= nil
+	local money = cash()
+	local best, bestRank, bestStock = nil, -1, 0
+
+	for _, item in ipairs(module.List) do
+		local stock = shopStock(kind, item.name)
+		local unlocked = rebirths() >= (item.rebirth or 0)
+		local allowed = not filterOn or chosen[item.name] == true
+		if allowed and unlocked and stock > 0 and item.price <= money and item.price <= Settings.shopMax then
+			local rank = item.rank or 0
+			if rank > bestRank then
+				best, bestRank, bestStock = item, rank, stock
+			end
+		end
+	end
+	return best, bestStock
+end
+
+local function confirmShopPurchase(kind)
+	local pending = shopPending[kind]
+	if not pending then
+		return
+	end
+	local currentStock = shopStock(kind, pending.item.name)
+	if currentStock < pending.stock or cash() < pending.cash then
+		if kind == "scanner" then
+			stats.scanners += 1
+		else
+			stats.food += 1
+		end
+		log(string.format(T.logShop, pending.item.name, pending.item.price))
+		shopPending[kind] = nil
+	elseif os.clock() - pending.at > 2 then
+		shopPending[kind] = nil
+	end
+end
+
+local function shopStep(kind)
+	local now = os.clock()
+	if (kind == "scanner" and now < scannerCooldown) or (kind == "food" and now < foodCooldown) then
+		return false
+	end
+
+	local item, stock = bestShopItem(kind)
+	if not item then
+		state.shop[kind] = T.shopNothing
+		return false
+	end
+
+	local position = shopPosition(kind == "scanner" and "Scanners" or "Food")
+	if not position or not teleport(position + Vector3.new(0, 2, 5)) then
+		return false
+	end
+
+	safeWait(0.15)
+	local remote = kind == "scanner" and Remotes.ScannerEvent or Remotes.FoodEvent
+	local ok = pcall(function()
+		remote:FireServer("Buy", item.name)
+	end)
+	if not ok then
+		return false
+	end
+
+	if kind == "scanner" then
+		scannerCooldown = os.clock() + 2
+	else
+		foodCooldown = os.clock() + 2
+	end
+	shopPending[kind] = { item = item, stock = stock, cash = cash(), at = os.clock() }
+	state.shop[kind] = item.name
+	return true
+end
+
+local function parseInventoryPet(attr)
+	local ok, key, pet, animal = pcall(function()
+		local decoded = Animals.decodeAttr(attr)
+		local name = Animals.parseSlot(decoded)
+		return decoded, name, name and Animals[name] or nil
+	end)
+	if ok then
+		return key, pet, animal
+	end
+	return nil
+end
+
+local function bestInventoryWeight()
+	local inventory = LocalPlayer:FindFirstChild("Inventory")
+	local best = 0
+	if not inventory then
+		return best
+	end
+	for attr, count in pairs(inventory:GetAttributes()) do
+		if type(count) == "number" and count > 0 then
+			local _, _, animal = parseInventoryPet(attr)
+			if animal and (animal.weight or 0) > best then
+				best = animal.weight
+			end
+		end
+	end
+	return best
+end
+
+local function sellKey()
+	local inventory = LocalPlayer:FindFirstChild("Inventory")
+	if not inventory then
+		return nil
+	end
+	local best = math.max(bestOwnWeight(), bestInventoryWeight())
+	local names = Settings.sellNames
+	local rarities = Settings.sellRarities
+	local namesOn = names and next(names) ~= nil
+	local raritiesOn = rarities and next(rarities) ~= nil
+
+	for attr, count in pairs(inventory:GetAttributes()) do
+		if type(count) == "number" and count > 0
+			and not (attr:match("_Size$") or attr:match("_Weight$") or attr:match("_Mood$")) then
+			local key, pet, animal = parseInventoryPet(attr)
+			if key and animal then
+				local weight = animal.weight or 0
+				local rarity = animal.rarityType or "Common"
+				local allowed = true
+				if namesOn and not names[pet] then
+					allowed = false
+				end
+				if allowed and raritiesOn and not rarities[rarity] then
+					allowed = false
+				end
+				if allowed and Settings.sellUnder > 0 and weight >= Settings.sellUnder then
+					allowed = false
+				end
+				if allowed and Settings.keepBest and weight >= best and count <= 1 then
+					allowed = false
+				end
+				if allowed then
+					return key, pet, weight, attr, count
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function confirmSale()
+	if not sellPending then
+		return
+	end
+	local inventory = LocalPlayer:FindFirstChild("Inventory")
+	local count = inventory and inventory:GetAttribute(sellPending.attr) or 0
+	if type(count) == "number" and count < sellPending.count then
+		stats.sold += 1
+		log(string.format(T.logSold, sellPending.pet, sellPending.weight))
+		sellPending = nil
+	elseif os.clock() - sellPending.at > 2 then
+		sellPending = nil
+	end
+end
+
+local function sellStep()
+	local now = os.clock()
+	if now < sellCooldown then
+		return false
+	end
+
+	local key, pet, weight, attr, count = sellKey()
+	if not key then
+		state.sell = T.sellNone
+		return false
+	end
+
+	local position = shopPosition("Sell")
+	if not position or not teleport(position + Vector3.new(0, 2, 5)) then
+		return false
+	end
+
+	safeWait(0.12)
+	local ok = pcall(function()
+		Remotes.SellEvent:FireServer(key)
+	end)
+	if not ok then
+		return false
+	end
+
+	sellCooldown = os.clock() + math.max(0.5, Settings.sellEvery or 2)
+	sellPending = { attr = attr, count = count, pet = pet, weight = weight, at = os.clock() }
+	state.sell = pet
+	return true
+end
+
+----------------------------------------------------------------------
+-- 4. AUTO
+----------------------------------------------------------------------
+
+local rebirthCooldown, upgradeCooldown, disguiseCooldown, equipCooldown = 0, 0, 0, 0
+
+local function autoStep()
+	local now = os.clock()
+
+	if isOn("rebirth") and now > rebirthCooldown then
+		local ok, can = pcall(Rebirth.CanRebirth, LocalPlayer)
+		if ok and can then
+			rebirthCooldown = now + 3
+			Remotes.RebirthEvent:FireServer()
+			log(string.format(T.logRebirth, rebirths()))
+		end
+	end
+
+	if isOn("upgrade") and now > upgradeCooldown then
+		upgradeCooldown = now + 5
+		local base = myBase()
+		local sign = base and base:FindFirstChild("UpgradeSign")
+		if sign then
+			teleport(sign:GetPivot().Position)
+			safeWait(0.15)
+		end
+		Remotes.BaseUpgradeEvent:FireServer()
+	end
+
+	if isOn("equipBest") and now > equipCooldown then
+		equipCooldown = now + math.max(1, Settings.equipInterval or 5)
+		Remotes.EquipBestEvent:FireServer()
+	end
+
+	if isOn("disguise") and now > disguiseCooldown and not LocalPlayer:GetAttribute("Disguised") then
+		local base = myBase()
+		local pipe = base and base:FindFirstChild("Pipe")
+		if pipe then
+			local prompt
+			for _, child in ipairs(pipe:GetDescendants()) do
+				if child:IsA("ProximityPrompt") and child.ActionText == "Disguise" then
+					prompt = child
+					break
+				end
+			end
+			if prompt then
+				disguiseCooldown = now + 8
+				local position = promptPosition(prompt)
+				if position and teleport(position) then
+					safeWait(0.2)
+					firePrompt(prompt)
+					log(T.logPipe)
+				end
+			end
+		end
+	end
+end
+
+----------------------------------------------------------------------
+-- 4. ESP
+----------------------------------------------------------------------
+
+local espModels = {}
+
+local function clearEsp()
+	for model, box in pairs(espModels) do
+		if box then
+			box:Destroy()
+		end
+	end
+	espModels = {}
+end
+
+local function drawEsp()
+	if not Settings.esp then
+		if next(espModels) then
+			clearEsp()
+		end
+		return
+	end
+
+	local found = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player:GetAttribute("Disguised") then
+			found += 1
+			local char = player.Character
+			if char and not espModels[char] then
+				local box = Instance.new("SelectionBox")
+				box.Adornee = char
+				box.LineThickness = 0.08
+				box.Color3 = Color3.fromRGB(255, 59, 127)
+				box.SurfaceColor3 = Color3.fromRGB(255, 59, 127)
+				box.SurfaceTransparency = 0.7
+				box.Parent = workspace.CurrentCamera
+				espModels[char] = box
+			end
+		end
+	end
+	stats.fakes = found
+end
+
+----------------------------------------------------------------------
+-- Loops
+----------------------------------------------------------------------
+
+local function tick()
+	if not scriptAlive() then
+		return
+	end
+	confirmBuy()
+	confirmShopPurchase("scanner")
+	confirmShopPurchase("food")
+	confirmSale()
+
+	if not (isOn("farm") or isOn("rebirthFarm")) then
+		state.pendingPrompt = nil
+	end
+
+	local didHatch = false
+	if isOn("autoHatch") then
+		didHatch = hatchReady() == true
+	end
+
+	if didHatch then
+		drawEsp()
+		return
+	end
+
+	local didUtilityAction = false
+	if not isOn("protect") then
+		if isOn("buyScanners") then
+			didUtilityAction = shopStep("scanner")
+		end
+		if not didUtilityAction and isOn("buyFood") then
+			didUtilityAction = shopStep("food")
+		end
+		if not didUtilityAction and isOn("autoSell") then
+			didUtilityAction = sellStep()
+		end
+	end
+	if didUtilityAction then
+		drawEsp()
+		return
+	end
+
+	if isOn("protect") then
+		state.text = T.protectState
+	elseif isOn("rebirthFarm") then
+		farmStep("rebirth")
+	elseif isOn("farm") then
+		farmStep("normal")
+	elseif isOn("steal") then
+		stealStep()
+	else
+		state.text = T.idle
+	end
+
+	if isOn("rebirth") or isOn("upgrade") or isOn("equipBest") or isOn("disguise") then
+		autoStep()
+	end
+
+	drawEsp()
+end
+
+----------------------------------------------------------------------
+-- WINDOW
+----------------------------------------------------------------------
+
+local THEME = {
+	Background = Color3.fromHex("#0A0A0C"),
+	Surface = Color3.fromHex("#141418"),
+	Surface2 = Color3.fromHex("#1A1A20"),
+	Surface3 = Color3.fromHex("#2A2A33"),
+	Stroke = Color3.fromHex("#26262E"),
+	StrokeHover = Color3.fromHex("#3C3C49"),
+	Accent = Color3.fromHex("#FF3B7F"),
+	AccentDark = Color3.fromHex("#1A0710"),
+	Text = Color3.fromHex("#F5F5F7"),
+	Muted = Color3.fromHex("#8D8D99"),
+}
+
+Airflow.ThemePresets.Robscript = THEME
+Airflow:SetDefaultTheme(THEME)
+
+local function destroyWindow()
+	local previous = getgenv().__FakeEggWindow
+	if previous then
+		pcall(function()
+			previous:Destroy()
+		end)
+		getgenv().__FakeEggWindow = nil
+	end
+end
+
+local function buildUI()
+	T = TEXT[Settings.lang]
+	destroyWindow()
+
+	Window = Airflow:CreateWindow({
+		Name = "RobScript.com",
+		LoadingSubtitle = T.window,
+		ToggleUIKeybind = "RightControl",
+		Size = UDim2.fromOffset(780, 540),
+		Backdrop = { Weather = "Fireflies", Tint = 0.35 },
+		Theme = THEME,
+		ConfigurationSaving = { Enabled = true, FolderName = "FakeEggHub" },
+		Home = {
+			Name = T.home,
+			Title = "RobScript.com",
+			Welcome = T.window,
+			Tier = "v1.0",
+			Stats = { "Players", "Session", "FPS", "Ping", "Game", "Executor" },
+		},
+	})
+	getgenv().__FakeEggWindow = Window
+	if getgenv().__FakeEgg then
+		getgenv().__FakeEgg.window = Window
+	end
+
+	local LogTab = Window:CreateTab({ Name = T.logs, Icon = "scroll-text" })
+	local LogBox = LogTab:CreateGroupbox({ Name = T.logBox, Side = "Left" })
+	Log = LogBox:CreateLog({
+		Name = T.logName,
+		MaxEntries = 200,
+		MaxRows = 14,
+		Timestamps = true,
+		EmptyText = T.logEmpty,
+	})
+
+	------------------------------------------------------------------
+	local FarmTab = Window:CreateTab({ Name = T.tabFarm, Icon = "egg" })
+	local FarmMain = FarmTab:CreateGroupbox({ Name = T.tabFarm, Side = "Left" })
+	local FarmInfo = FarmTab:CreateGroupbox({ Name = T.state, Side = "Right" })
+
+	UiRefs.farm = FarmMain:CreateToggle({
+		Name = T.farm,
+		Desc = T.farmDesc,
+		Flag = "Farm",
+		CurrentValue = Settings.farm,
+		Callback = function(on)
+			Settings.farm = on
+			log(on and T.farmOn or T.farmOff)
+		end,
+	})
+
+	UiRefs.skipFake = FarmMain:CreateToggle({
+		Name = T.skipFake,
+		Desc = T.skipFakeDesc,
+		Flag = "SkipFake",
+		CurrentValue = Settings.skipFake,
+		Callback = function(on)
+			Settings.skipFake = on
+		end,
+	})
+
+	FarmMain:CreateParagraph({
+		Title = T.skipFake,
+		Content = T.skipFakeWarn,
+	})
+
+	UiRefs.autoHatch = FarmMain:CreateToggle({
+		Name = T.autoHatch,
+		Desc = T.autoHatchDesc,
+		Flag = "AutoHatch",
+		CurrentValue = Settings.autoHatch,
+		Callback = function(on)
+			Settings.autoHatch = on
+		end,
+	})
+
+	FarmMain:CreateToggle({
+		Name = T.onlyBetter,
+		Desc = T.onlyBetterDesc,
+		Flag = "OnlyBetter",
+		CurrentValue = Settings.onlyBetter,
+		Callback = function(on)
+			Settings.onlyBetter = on
+		end,
+	})
+
+	FarmMain:CreateToggle({
+		Name = T.maxPriceEnabled,
+		Desc = T.maxPriceEnabledDesc,
+		Flag = "MaxPriceEnabled",
+		CurrentValue = Settings.maxPriceEnabled,
+		Callback = function(on)
+			Settings.maxPriceEnabled = on
+		end,
+	})
+
+	FarmMain:CreateSlider({
+		Name = T.maxPrice,
+		Desc = T.maxPriceDesc,
+		Range = { 0, 1000000000000 },
+		Increment = 1000,
+		Suffix = " $",
+		CurrentValue = Settings.maxPrice,
+		Flag = "MaxPrice",
+		Callback = function(value)
+			Settings.maxPrice = value
+		end,
+	})
+
+	UiRefs.eggNames = FarmMain:CreateDropdown({
+		Name = T.eggNames,
+		Desc = T.eggNamesDesc,
+		Options = eggNameList(),
+		MultipleOptions = true,
+		Searchable = true,
+		Flag = "EggNames",
+		Callback = function(picked)
+			local map = {}
+			for _, name in ipairs(picked or {}) do
+				map[tostring(name)] = true
+			end
+			Settings.eggNames = map
+		end,
+	})
+
+	UiRefs.eggRarities = FarmMain:CreateDropdown({
+		Name = T.eggRarities,
+		Desc = T.eggRaritiesDesc,
+		Options = eggRarityList(),
+		MultipleOptions = true,
+		Searchable = true,
+		Flag = "EggRarities",
+		Callback = function(picked)
+			local map = {}
+			for _, name in ipairs(picked or {}) do
+				map[tostring(name)] = true
+			end
+			Settings.eggRarities = map
+		end,
+	})
+
+	FarmInfo:CreateStatus({
+		Name = T.state,
+		Style = "Row",
+		Pin = true,
+		Update = function()
+			return "<Accent>" .. tostring(state.text) .. "</Accent>"
+		end,
+	})
+
+	FarmInfo:CreateStatus({
+		Name = T.cash,
+		Style = "Row",
+		Update = function()
+			return "<Success>$" .. tostring(math.floor(cash())) .. "</Success>"
+		end,
+	})
+
+	FarmInfo:CreateStatus({
+		Name = T.best,
+		Style = "Row",
+		Update = function()
+			return tostring(bestOwnWeight())
+		end,
+	})
+
+	FarmInfo:CreateStatus({
+		Name = T.eggsBought,
+		Style = "Row",
+		Update = function()
+			return tostring(stats.bought)
+		end,
+	})
+
+	FarmInfo:CreateStatus({
+		Name = T.hatched,
+		Style = "Row",
+		Update = function()
+			return tostring(stats.hatched)
+		end,
+	})
+
+	------------------------------------------------------------------
+	local StealTab = Window:CreateTab({ Name = T.tabSteal, Icon = "hand-metal" })
+	local StealMain = StealTab:CreateGroupbox({ Name = T.tabSteal, Side = "Left" })
+	local StealInfo = StealTab:CreateGroupbox({ Name = T.state, Side = "Right" })
+
+	UiRefs.steal = StealMain:CreateToggle({
+		Name = T.steal,
+		Desc = T.stealDesc,
+		Flag = "Steal",
+		CurrentValue = Settings.steal,
+		Callback = function(on)
+			Settings.steal = on
+			log(on and T.stealOn or T.stealOff)
+		end,
+	})
+
+	StealMain:CreateDropdown({
+		Name = T.stealMode,
+		Desc = T.stealModeDesc,
+		Options = { "Tween", "Instant" },
+		CurrentOption = Settings.stealMode,
+		Flag = "StealMode",
+		Callback = function(value)
+			local pick = type(value) == "table" and value[1] or value
+			if pick then
+				Settings.stealMode = tostring(pick)
+			end
+		end,
+	})
+
+	StealMain:CreateSlider({
+		Name = T.tweenSpeed,
+		Desc = T.tweenSpeedDesc,
+		Range = { 50, 400 },
+		Increment = 5,
+		Suffix = " studs/s",
+		CurrentValue = Settings.tweenSpeed,
+		Flag = "TweenSpeed",
+		Callback = function(value)
+			Settings.tweenSpeed = value
+		end,
+	})
+
+	StealMain:CreateSlider({
+		Name = T.minWeight,
+		Desc = T.minWeightDesc,
+		Range = { 0, 1000000 },
+		Increment = 100,
+		CurrentValue = Settings.minWeight,
+		Flag = "MinWeight",
+		Callback = function(value)
+			Settings.minWeight = value
+		end,
+	})
+
+	StealMain:CreateToggle({
+		Name = T.returnHome,
+		Desc = T.returnHomeDesc,
+		Flag = "ReturnHome",
+		CurrentValue = Settings.returnHome,
+		Callback = function(on)
+			Settings.returnHome = on
+		end,
+	})
+
+	StealInfo:CreateStatus({
+		Name = T.state,
+		Style = "Row",
+		Pin = true,
+		Update = function()
+			return "<Accent>" .. tostring(state.text) .. "</Accent>"
+		end,
+	})
+
+	StealInfo:CreateStatus({
+		Name = T.stolen,
+		Style = "Row",
+		Update = function()
+			return tostring(stats.stolen)
+		end,
+	})
+
+	------------------------------------------------------------------
+	local RebirthTab = Window:CreateTab({ Name = T.tabRebirth, Icon = "refresh-cw" })
+	local RebirthMain = RebirthTab:CreateGroupbox({ Name = T.tabRebirth, Side = "Left" })
+	local RebirthInfo = RebirthTab:CreateGroupbox({ Name = T.state, Side = "Right" })
+
+	UiRefs.rebirthFarm = RebirthMain:CreateToggle({
+		Name = T.rebirthFarm,
+		Desc = T.rebirthFarmDesc,
+		Flag = "RebirthFarm",
+		CurrentValue = Settings.rebirthFarm,
+		Callback = function(on)
+			Settings.rebirthFarm = on
+			if on then
+				Settings.rebirth = true
+				if UiRefs.rebirth then
+					UiRefs.rebirth:Set(true)
+				end
+			end
+			log(on and T.rebirthOn or T.rebirthOff)
+		end,
+	})
+
+	RebirthMain:CreateParagraph({
+		Title = T.rebirthReal,
+		Content = T.rebirthRealDesc,
+	})
+
+	RebirthInfo:CreateStatus({
+		Name = T.rebirthNeed,
+		Style = "Row",
+		Pin = true,
+		Update = function()
+			local animal = rebirthAnimal()
+			return animal and ("<Accent>" .. animal .. "</Accent>") or "<Muted>" .. T.rebirthNone .. "</Muted>"
+		end,
+	})
+
+	RebirthInfo:CreateStatus({
+		Name = T.state,
+		Style = "Row",
+		Update = function()
+			return tostring(state.text)
+		end,
+	})
+
+	RebirthInfo:CreateStatus({
+		Name = "Rebirths",
+		Style = "Row",
+		Update = function()
+			return tostring(rebirths())
+		end,
+	})
+
+	------------------------------------------------------------------
+	local ShopsTab = Window:CreateTab({ Name = T.tabShops, Icon = "shopping-cart" })
+	local ShopsMain = ShopsTab:CreateGroupbox({ Name = T.tabShops, Side = "Left" })
+	local ShopsInfo = ShopsTab:CreateGroupbox({ Name = T.state, Side = "Right" })
+
+	UiRefs.buyScanners = ShopsMain:CreateToggle({
+		Name = T.buyScanners,
+		Desc = T.buyScannersDesc,
+		Flag = "BuyScanners",
+		CurrentValue = Settings.buyScanners,
+		Callback = function(on)
+			Settings.buyScanners = on
+		end,
+	})
+
+	UiRefs.scannerTypes = ShopsMain:CreateDropdown({
+		Name = T.shopTypes,
+		Desc = T.shopTypesDesc,
+		Options = itemNameList(Scanners),
+		CurrentOption = selectedOptions(Settings.scannerTypes),
+		MultipleOptions = true,
+		Searchable = true,
+		Flag = "ScannerTypes",
+		Callback = function(picked)
+			local map = {}
+			for _, name in ipairs(picked or {}) do
+				map[tostring(name)] = true
+			end
+			Settings.scannerTypes = map
+		end,
+	})
+
+	UiRefs.buyFood = ShopsMain:CreateToggle({
+		Name = T.buyFood,
+		Desc = T.buyFoodDesc,
+		Flag = "BuyFood",
+		CurrentValue = Settings.buyFood,
+		Callback = function(on)
+			Settings.buyFood = on
+		end,
+	})
+
+	UiRefs.foodTypes = ShopsMain:CreateDropdown({
+		Name = T.shopTypes,
+		Desc = T.shopTypesDesc,
+		Options = itemNameList(Food),
+		CurrentOption = selectedOptions(Settings.foodTypes),
+		MultipleOptions = true,
+		Searchable = true,
+		Flag = "FoodTypes",
+		Callback = function(picked)
+			local map = {}
+			for _, name in ipairs(picked or {}) do
+				map[tostring(name)] = true
+			end
+			Settings.foodTypes = map
+		end,
+	})
+
+	ShopsMain:CreateSlider({
+		Name = T.shopMax,
+		Desc = T.shopMaxDesc,
+		Range = { 0, 2500000000 },
+		Increment = 1000,
+		Suffix = " $",
+		CurrentValue = Settings.shopMax,
+		Flag = "ShopMax",
+		Callback = function(value)
+			Settings.shopMax = value
+		end,
+	})
+
+	ShopsInfo:CreateStatus({
+		Name = T.buyScanners,
+		Style = "Row",
+		Pin = true,
+		Update = function()
+			return tostring(state.shop.scanner) .. " · " .. tostring(stats.scanners)
+		end,
+	})
+
+	ShopsInfo:CreateStatus({
+		Name = T.buyFood,
+		Style = "Row",
+		Update = function()
+			return tostring(state.shop.food) .. " · " .. tostring(stats.food)
+		end,
+	})
+
+	ShopsInfo:CreateStatus({
+		Name = T.cash,
+		Style = "Row",
+		Update = function()
+			return "<Success>$" .. tostring(math.floor(cash())) .. "</Success>"
+		end,
+	})
+
+	------------------------------------------------------------------
+	local SellTab = Window:CreateTab({ Name = T.tabSell, Icon = "badge-dollar-sign" })
+	local SellMain = SellTab:CreateGroupbox({ Name = T.tabSell, Side = "Left" })
+	local SellInfo = SellTab:CreateGroupbox({ Name = T.state, Side = "Right" })
+
+	UiRefs.autoSell = SellMain:CreateToggle({
+		Name = T.autoSell,
+		Desc = T.autoSellDesc,
+		Flag = "AutoSell",
+		CurrentValue = Settings.autoSell,
+		Callback = function(on)
+			Settings.autoSell = on
+		end,
+	})
+
+	UiRefs.sellNames = SellMain:CreateDropdown({
+		Name = T.sellNames,
+		Desc = T.sellNamesDesc,
+		Options = petNameList(),
+		CurrentOption = selectedOptions(Settings.sellNames),
+		MultipleOptions = true,
+		Searchable = true,
+		Flag = "SellNames",
+		Callback = function(picked)
+			local map = {}
+			for _, name in ipairs(picked or {}) do
+				map[tostring(name)] = true
+			end
+			Settings.sellNames = map
+		end,
+	})
+
+	UiRefs.sellRarities = SellMain:CreateDropdown({
+		Name = T.sellRarities,
+		Desc = T.sellRaritiesDesc,
+		Options = petRarityList(),
+		CurrentOption = selectedOptions(Settings.sellRarities),
+		MultipleOptions = true,
+		Searchable = true,
+		Flag = "SellRarities",
+		Callback = function(picked)
+			local map = {}
+			for _, name in ipairs(picked or {}) do
+				map[tostring(name)] = true
+			end
+			Settings.sellRarities = map
+		end,
+	})
+
+	SellMain:CreateSlider({
+		Name = T.sellUnder,
+		Desc = T.sellUnderDesc,
+		Range = { 0, 100000 },
+		Increment = 1,
+		CurrentValue = Settings.sellUnder,
+		Flag = "SellUnder",
+		Callback = function(value)
+			Settings.sellUnder = value
+		end,
+	})
+
+	SellMain:CreateToggle({
+		Name = T.keepBest,
+		Desc = T.keepBestDesc,
+		Flag = "KeepBest",
+		CurrentValue = Settings.keepBest,
+		Callback = function(on)
+			Settings.keepBest = on
+		end,
+	})
+
+	SellMain:CreateSlider({
+		Name = T.sellEvery,
+		Desc = T.sellEveryDesc,
+		Range = { 1, 60 },
+		Increment = 1,
+		Suffix = " s",
+		CurrentValue = Settings.sellEvery,
+		Flag = "SellEvery",
+		Callback = function(value)
+			Settings.sellEvery = value
+		end,
+	})
+
+	SellInfo:CreateStatus({
+		Name = T.state,
+		Style = "Row",
+		Pin = true,
+		Update = function()
+			return "<Accent>" .. tostring(state.sell) .. "</Accent>"
+		end,
+	})
+
+	SellInfo:CreateStatus({
+		Name = T.sold,
+		Style = "Row",
+		Update = function()
+			return tostring(stats.sold)
+		end,
+	})
+
+	------------------------------------------------------------------
+	local AutoTab = Window:CreateTab({ Name = T.tabAuto, Icon = "settings-2" })
+	local AutoMain = AutoTab:CreateGroupbox({ Name = T.tabAuto, Side = "Left" })
+	local AutoInfo = AutoTab:CreateGroupbox({ Name = T.state, Side = "Right" })
+
+	UiRefs.rebirth = AutoMain:CreateToggle({
+		Name = T.rebirth,
+		Desc = T.rebirthDesc,
+		Flag = "AutoRebirth",
+		CurrentValue = Settings.rebirth,
+		Callback = function(on)
+			Settings.rebirth = on
+			log(on and T.rebirthOn or T.rebirthOff)
+		end,
+	})
+
+	AutoMain:CreateToggle({
+		Name = T.upgrade,
+		Desc = T.upgradeDesc,
+		Flag = "AutoUpgrade",
+		CurrentValue = Settings.upgrade,
+		Callback = function(on)
+			Settings.upgrade = on
+		end,
+	})
+
+	AutoMain:CreateToggle({
+		Name = T.disguise,
+		Desc = T.disguiseDesc,
+		Flag = "AutoDisguise",
+		CurrentValue = Settings.disguise,
+		Callback = function(on)
+			Settings.disguise = on
+		end,
+	})
+
+	AutoMain:CreateToggle({
+		Name = T.equipBest,
+		Desc = T.equipBestDesc,
+		Flag = "EquipBest",
+		CurrentValue = Settings.equipBest,
+		Callback = function(on)
+			Settings.equipBest = on
+		end,
+	})
+
+	AutoMain:CreateSlider({
+		Name = T.equipInterval,
+		Desc = T.equipIntervalDesc,
+		Range = { 1, 60 },
+		Increment = 1,
+		Suffix = " s",
+		CurrentValue = Settings.equipInterval,
+		Flag = "EquipInterval",
+		Callback = function(value)
+			Settings.equipInterval = value
+		end,
+	})
+
+	AutoInfo:CreateStatus({
+		Name = "Rebirths",
+		Style = "Row",
+		Pin = true,
+		Update = function()
+			return tostring(rebirths())
+		end,
+	})
+
+	AutoInfo:CreateStatus({
+		Name = T.pes,
+		Style = "Row",
+		Update = function()
+			local base = myBase()
+			local count = 0
+			if base then
+				for _, child in ipairs(base:GetChildren()) do
+					if child:GetAttribute("Owner") == LocalPlayer.Name then
+						count += 1
+					end
+				end
+			end
+			return tostring(count)
+		end,
+	})
+
+	------------------------------------------------------------------
+	local EspTab = Window:CreateTab({ Name = T.tabVisual, Icon = "eye" })
+	local EspMain = EspTab:CreateGroupbox({ Name = T.esp, Side = "Left" })
+	local EspInfo = EspTab:CreateGroupbox({ Name = T.state, Side = "Right" })
+
+	EspMain:CreateToggle({
+		Name = T.esp,
+		Desc = T.espDesc,
+		Flag = "Esp",
+		CurrentValue = Settings.esp,
+		Callback = function(on)
+			Settings.esp = on
+			if not on then
+				clearEsp()
+			end
+			log(on and T.espOn or T.espOff)
+		end,
+	})
+
+	EspMain:CreateToggle({
+		Name = T.espNames,
+		Desc = T.espNamesDesc,
+		Flag = "EspNames",
+		CurrentValue = Settings.espNames,
+		Callback = function(on)
+			Settings.espNames = on
+		end,
+	})
+
+	EspInfo:CreateStatus({
+		Name = T.fakes,
+		Style = "Row",
+		Pin = true,
+		Update = function()
+			return "<Warning>" .. tostring(stats.fakes) .. "</Warning>"
+		end,
+	})
+
+	------------------------------------------------------------------
+	local SettingsTab = Window:CreateTab({ Name = T.tabSettings, Icon = "settings" })
+	local SetBox = SettingsTab:CreateGroupbox({ Name = T.tabSettings, Side = "Left" })
+	local HelpBox = SettingsTab:CreateGroupbox({ Name = T.hotkeys, Side = "Right" })
+
+	SetBox:CreateDropdown({
+		Name = T.lang,
+		Desc = T.langDesc,
+		Options = { "Русский", "English" },
+		CurrentOption = Settings.lang == "ru" and "Русский" or "English",
+		Flag = "Language",
+		Callback = function(value)
+			local pick = type(value) == "table" and value[1] or value
+			local lang = pick == "English" and "en" or "ru"
+			if lang ~= Settings.lang then
+				Settings.lang = lang
+				task.spawn(buildUI)
+			end
+		end,
+	})
+
+	SetBox:CreateConfigManager({ Name = "Configs" })
+	SettingsTab:CreateThemeManager({ Name = "Theme", Side = "Right" })
+
+	HelpBox:CreateParagraph({
+		Title = "RobScript.com",
+		Content = T.hotkeysText,
+	})
+end
+
+----------------------------------------------------------------------
+-- Start
+----------------------------------------------------------------------
+
+buildUI()
+
+task.spawn(function()
+	while scriptAlive() do
+		local ok, err = xpcall(tick, debug.traceback)
+		if not ok then
+			warn("[RobScript.com] Tick failed: " + tostring(err))
+		end
+		safeWait(0.35)
+	end
+end)
+
+getgenv().__FakeEgg = {
+	window = Window,
+	log = Log,
+	settings = Settings,
+	stats = stats,
+	state = state,
+	teleport = teleport,
+	farmStep = farmStep,
+	stealStep = stealStep,
+	shopStep = shopStep,
+	sellStep = sellStep,
+	bestShopItem = bestShopItem,
+	sellKey = sellKey,
+}
+
+print("[RobScript.com] Fake an Egg Hub loaded with Anti-Detect Safeguards")
