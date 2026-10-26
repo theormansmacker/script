@@ -6,12 +6,12 @@
 	║                                                  ║
 	╚══════════════════════════════════════════════════╝
 
-	Fake an Egg Hub (Anti-Detect & Tween Safeguards Edition)
-	--------------------------------------------------------
-	Egg farming, pet stealing, rebirth and fake-egg ESP:
+	Fake an Egg Hub (Retaliation Steal & Anti-Detect Edition)
+	---------------------------------------------------------
+	Egg farming, revenge pet stealing, rebirth and fake-egg ESP:
 
-	  1. Farm   - buys the best egg, carries it home, hatches it
-	  2. Steal  - takes the heaviest pet from another pen (Tween or Instant)
+	  1. Farm   - buys the best egg (Tween/Instant), carries it home, hatches it
+	  2. Steal  - detects when stolen from, infiltrates the thief base, picks best pet, instant 'E' steal, returns home
 	  3. Auto   - rebirth, pen upgrade, disguise, equip best
 	  4. ESP    - highlights the players hiding as eggs
 
@@ -52,6 +52,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
 local SelectionBox = Instance.new("SelectionBox")
 
@@ -91,23 +92,28 @@ local TEXT = {
 		rebirthOn = "Ребёрс вкл",
 		rebirthOff = "Ребёрс выкл",
 		espOn = "ESP вкл",
-		espOff = "ESP выкл",
+		espOff = "ESP вкл",
 		logHatched = "Вылупил: <Accent>%s</Accent>",
 		logBuy = "Покупаю <Accent>%s</Accent> за $%d",
 		logBought = "<Success>Куплено</Success>: %s",
-		logStolen = "Краду <Accent>%s</Accent> (вес %d)",
+		logStolen = "Месть! Украл <Accent>%s</Accent> (вес %d)",
+		logTheftDetected = "<Warning>Внимание!</Warning> База %s украла у вас питомца!",
 		logRebirth = "<Success>Ребёрс</Success> (было %d)",
 		logPipe = "Залез в трубу",
 		logShop = "Купил <Accent>%s</Accent> за $%d",
 		logSold = "Продал <Accent>%s</Accent> (вес %d)",
 		protectState = "защита",
 		tabFarm = "Ферма",
-		tabSteal = "Кража",
+		tabSteal = "Месть / Кража",
 		tabAuto = "Авто",
 		tabVisual = "ESP",
 		tabSettings = "Настройки",
 		farm = "Ферма яиц",
 		farmDesc = "Покупает яйцо, несёт в гнездо и вылупляет",
+		movementMode = "Режим перемещения",
+		movementModeDesc = "Tween (плавный полет) или Instant (мгновенно)",
+		tweenSpeed = "Скорость полета",
+		tweenSpeedDesc = "Скорость движения при Tween (меньше = безопаснее)",
 		onlyBetter = "Только лучше текущих",
 		onlyBetterDesc = "Не покупает яйца слабее лучшего питомца в пене",
 		maxPrice = "Максимальная цена",
@@ -134,12 +140,8 @@ local TEXT = {
 		rebirthDone = "условие выполнено",
 		rebirthNone = "нет требования",
 		rebirthFarming = "фармлю под ребёрс",
-		steal = "Авто-кража",
-		stealDesc = "Идёт в чужой пен и уносит питомца",
-		stealMode = "Режим кражи",
-		stealModeDesc = "Выберите способ передвижения при краже",
-		tweenSpeed = "Скорость полета (Tween)",
-		tweenSpeedDesc = "Скорость перемещения к питомцу (меньше = плавнее/безопаснее)",
+		steal = "Авто-месть за кражу",
+		stealDesc = "Ждет кражи у вас, затем телепортируется к обидчику, жмет E и возвращает пет на базу",
 		minWeight = "Минимальный вес",
 		minWeightDesc = "Ниже этого веса питомцев не трогать",
 		returnHome = "Возвращаться домой",
@@ -167,16 +169,16 @@ local TEXT = {
 		fakes = "Фейков найдено",
 		eggsBought = "Яиц куплено",
 		hatched = "Вылуплено",
-		stolen = "Украдено",
-		idle = "жду",
+		stolen = "Украдено (месть)",
+		idle = "ожидание кражи",
 		farming = "несу яйцо",
 		buying = "покупаю",
 		hatching = "вылупляю",
-		stealing = "краду",
+		stealing = "возвращаю украденное",
 		noMoney = "нет денег",
 		full = "пен полон",
 		noEgg = "нет подходящих яиц",
-		noTarget = "нет цели",
+		noTarget = "ожидание кражи у вас",
 		ready = "готово",
 		hotkeys = "Горячие клавиши",
 		hotkeysText = "RightControl — показать или скрыть окно",
@@ -185,7 +187,7 @@ local TEXT = {
 		buyScanners = "Авто-покупка сканеров",
 		buyScannersDesc = "Берёт лучший сканер в наличии, на который хватает денег",
 		buyFood = "Авто-покупка еды",
-		buyFoodDesc = "Берёт лучшую еду в наличии, на который хватает денег",
+		buyFoodDesc = "Берёт лучшую еду в наличии, на которую хватает денег",
 		shopTypes = "Типы",
 		shopTypesDesc = "Пусто — любые",
 		shopMax = "Лимит цены",
@@ -217,8 +219,8 @@ local TEXT = {
 		logEmpty = "Nothing yet",
 		farmOn = "Farm on",
 		farmOff = "Farm off",
-		stealOn = "Steal on",
-		stealOff = "Steal off",
+		stealOn = "Revenge steal on",
+		stealOff = "Revenge steal off",
 		protectOn = "Protect on",
 		protectOff = "Protect off",
 		rebirthOn = "Rebirth on",
@@ -228,19 +230,24 @@ local TEXT = {
 		logHatched = "Hatched: <Accent>%s</Accent>",
 		logBuy = "Buying <Accent>%s</Accent> for $%d",
 		logBought = "<Success>Bought</Success>: %s",
-		logStolen = "Stealing <Accent>%s</Accent> (weight %d)",
+		logStolen = "Revenge! Stole <Accent>%s</Accent> (weight %d)",
+		logTheftDetected = "<Warning>Alert!</Warning> Base owned by %s stole your pet!",
 		logRebirth = "<Success>Rebirth</Success> (was %d)",
 		logPipe = "Jumped into the pipe",
 		logShop = "Bought <Accent>%s</Accent> for $%d",
 		logSold = "Sold <Accent>%s</Accent> (weight %d)",
 		protectState = "protect",
 		tabFarm = "Farm",
-		tabSteal = "Steal",
+		tabSteal = "Revenge Steal",
 		tabAuto = "Auto",
 		tabVisual = "ESP",
 		tabSettings = "Settings",
 		farm = "Auto farm",
 		farmDesc = "Buys an egg, carries it home and hatches it",
+		movementMode = "Movement Mode",
+		movementModeDesc = "Tween (smooth flight) or Instant (instant teleport)",
+		tweenSpeed = "Tween Speed",
+		tweenSpeedDesc = "Speed of flight movement (lower = safer)",
 		onlyBetter = "Only better eggs",
 		onlyBetterDesc = "Skips eggs weaker than your best pet",
 		maxPrice = "Max price",
@@ -267,12 +274,8 @@ local TEXT = {
 		rebirthDone = "requirement met",
 		rebirthNone = "no requirement",
 		rebirthFarming = "farming for rebirth",
-		steal = "Auto steal",
-		stealDesc = "Runs into another pen and takes a pet",
-		stealMode = "Steal Mode",
-		stealModeDesc = "Choose movement method for stealing",
-		tweenSpeed = "Tween Speed",
-		tweenSpeedDesc = "Speed of flight to target (lower = smoother/safer)",
+		steal = "Auto Revenge Steal",
+		stealDesc = "Waits until someone steals from you, then infiltrates their base, presses E, and brings it back",
 		minWeight = "Min weight",
 		minWeightDesc = "Pets below this weight are left alone",
 		returnHome = "Run home",
@@ -300,16 +303,16 @@ local TEXT = {
 		fakes = "Fakes found",
 		eggsBought = "Eggs bought",
 		hatched = "Hatched",
-		stolen = "Stolen",
-		idle = "idle",
+		stolen = "Revenge Stolen",
+		idle = "waiting for theft",
 		farming = "carrying",
 		buying = "buying",
 		hatching = "hatching",
-		stealing = "stealing",
+		stealing = "infiltrating / stealing",
 		noMoney = "no money",
 		full = "pen full",
 		noEgg = "no fitting eggs",
-		noTarget = "no target",
+		noTarget = "waiting to be stolen from",
 		ready = "ready",
 		hotkeys = "Hotkeys",
 		hotkeysText = "RightControl shows or hides the window",
@@ -368,9 +371,9 @@ local Settings = {
 	keepBest = true,
 	sellEvery = 2,
 	steal = false,
-	stealMode = "Tween", -- "Tween" or "Instant"
-	tweenSpeed = 150, -- studs per second (lower is safer)
-	minWeight = 1000,
+	movementMode = "Tween", -- "Tween" or "Instant"
+	tweenSpeed = 160,       -- Studs per second
+	minWeight = 0,          -- 0 to grab the most valuable/highest weight pet
 	returnHome = true,
 	rebirth = false,
 	upgrade = false,
@@ -418,7 +421,7 @@ local function scriptAlive()
 end
 
 ----------------------------------------------------------------------
--- Anti-Detect & Safe Teleport/Movement Safeguards
+-- Anti-Detect & Movement Safeguards (Tween / Instant)
 ----------------------------------------------------------------------
 
 local function character()
@@ -434,56 +437,52 @@ local function rootPart()
 	return char and char:FindFirstChild("HumanoidRootPart") or nil
 end
 
--- Anti-ban safe humanized check & jitter wrapper
 local function safeWait(seconds)
-	task.wait(seconds + math.random(10, 40) / 1000)
+	task.wait(seconds + math.random(5, 20) / 1000)
 end
 
--- Humanized Safe Movement (Tween Flight with Velocity & Streamline Safeguards)
-local function safeMoveTo(targetPosition, speed)
+-- Universal Movement handler supporting Tween and Instant with anti-detect safeguards
+local function movePlayer(targetPosition)
 	local hrp = rootPart()
 	if not hrp or typeof(targetPosition) ~= "Vector3" then
 		return false
 	end
 
-	-- If using instant move mode or speed is extremely high, do safe direct CFrame
-	if Settings.stealMode == "Instant" or not speed or speed >= 500 then
+	if Settings.movementMode == "Instant" then
 		hrp.CFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0))
 		return true
+	else
+		-- Tween flight mode
+		local startPos = hrp.Position
+		local distance = (targetPosition - startPos).Magnitude
+		local duration = math.clamp(distance / math.max(Settings.tweenSpeed, 50), 0.1, 4.5)
+
+		local oldAnchored = hrp.Anchored
+		hrp.Anchored = true
+
+		local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+		local tween = TweenService:Create(hrp, tweenInfo, { CFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0)) })
+		tween:Play()
+
+		local completed = false
+		local conn
+		conn = tween.Completed:Connect(function()
+			completed = true
+			if conn then conn:Disconnect() end
+		end)
+
+		local startTime = os.clock()
+		while not completed and (os.clock() - startTime) < (duration + 1) do
+			task.wait()
+		end
+
+		hrp.Anchored = oldAnchored
+		return true
 	end
-
-	local startPos = hrp.Position
-	local distance = (targetPosition - startPos).Magnitude
-	local duration = math.clamp(distance / speed, 0.1, 4.0)
-
-	-- Disable physics/gravity interference safely during tween flight to prevent rubberbanding/flags
-	local oldAnchored = hrp.Anchored
-	hrp.Anchored = true
-
-	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-	local goal = { CFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0)) }
-	local tween = TweenService:Create(hrp, tweenInfo, goal)
-
-	tween:Play()
-	
-	local completed = false
-	local connection
-	connection = tween.Completed:Connect(function()
-		completed = true
-		if connection then connection:Disconnect() end
-	end)
-
-	local startTime = os.clock()
-	while not completed and (os.clock() - startTime) < (duration + 1) do
-		task.wait()
-	end
-
-	hrp.Anchored = oldAnchored
-	return true
 end
 
 local function teleport(position)
-	return safeMoveTo(position, Settings.stealMode == "Tween" and Settings.tweenSpeed or 1000)
+	return movePlayer(position)
 end
 
 local function promptPosition(prompt)
@@ -498,6 +497,24 @@ local function promptPosition(prompt)
 		return parent.Position
 	end
 	return parent:GetPivot().Position
+end
+
+-- Instant steal by simulating 'E' keypress and firing prompt
+local function instantStealPrompt(prompt)
+	if not prompt or not prompt.Parent then
+		return false
+	end
+	local ok = pcall(function()
+		if not prompt.Enabled then
+			prompt.Enabled = true
+		end
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(0.05)
+		fireproximityprompt(prompt)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+	end)
+	return ok
 end
 
 local function firePrompt(prompt)
@@ -646,7 +663,6 @@ end
 ----------------------------------------------------------------------
 
 local hatchCooldown = {}
-local hatchedLogged = {}
 local buyBlocked = {}
 
 local function pickEgg(mode)
@@ -792,42 +808,87 @@ local function confirmBuy()
 end
 
 ----------------------------------------------------------------------
--- 2. STEAL (With Tween / Instant Mode & Anti-Detect Safeguards)
+-- 2. REVENGE THEFT DETECTION & INFILTRATION (Steal highest-value pet)
 ----------------------------------------------------------------------
 
+local lastKnownMyPets = {}
+local wasStolenFrom = false
+local culpritBase = nil
 local stealCooldown = 0
 
-local function pickStolenPet()
-	local best, bestWeight = nil, Settings.minWeight
-	local me = LocalPlayer.Name
-	local bases = workspace:FindFirstChild("Bases")
-	if not bases then
+local function updateTheftDetection()
+	local base = myBase()
+	if not base then return end
+
+	local currentPets = {}
+	for _, child in ipairs(base:GetChildren()) do
+		if child:IsA("Model") or child:IsA("BasePart") then
+			currentPets[child.Name] = true
+		end
+	end
+
+	if next(lastKnownMyPets) ~= nil then
+		for petName, _ in pairs(lastKnownMyPets) do
+			if not currentPets[petName] and not LocalPlayer:GetAttribute("Carrying") then
+				-- A pet was removed from our base without our action; find who took it!
+				for _, otherBase in ipairs(workspace.Bases:GetChildren()) do
+					if otherBase ~= base and otherBase:GetAttribute("Owner") then
+						for _, op in ipairs(otherBase:GetChildren()) do
+							if op.Name == petName then
+								wasStolenFrom = true
+								culpritBase = otherBase
+								local ownerName = tostring(otherBase:GetAttribute("Owner"))
+								log(string.format(T.logTheftDetected, ownerName))
+								break
+							end
+						end
+					end
+					if wasStolenFrom then break end
+				end
+			end
+		end
+	end
+	lastKnownMyPets = currentPets
+end
+
+--- Pick the pet that makes the most money (highest weight/value) from the culprit base
+local function pickCulpritBestPet()
+	if not wasStolenFrom or not culpritBase or not culpritBase.Parent then
 		return nil
 	end
-	for _, base in ipairs(bases:GetChildren()) do
-		if base:GetAttribute("Owner") and base:GetAttribute("Owner") ~= me then
-			for _, pet in ipairs(base:GetChildren()) do
-				local petName = pet.Name
-				local weight = petWeight(petName)
-				if pet:IsA("Model") and weight > bestWeight then
-					for _, child in ipairs(pet:GetDescendants()) do
-						if child:IsA("ProximityPrompt") and child.ActionText == "Steal" then
-							best, bestWeight = { prompt = child, pet = pet, base = base, name = petName, weight = weight }, weight
-							break
-						end
+
+	local best, bestWeight = nil, -1
+	for _, pet in ipairs(culpritBase:GetChildren()) do
+		if pet:IsA("Model") then
+			local petName = pet.Name
+			local weight = petWeight(petName)
+			if weight > bestWeight then
+				for _, child in ipairs(pet:GetDescendants()) do
+					if child:IsA("ProximityPrompt") and child.ActionText == "Steal" then
+						best, bestWeight = { prompt = child, pet = pet, base = culpritBase, name = petName, weight = weight }, weight
+						break
 					end
 				end
 			end
 		end
 	end
+
+	-- If culprit base has no pets left, reset revenge state
+	if not best then
+		wasStolenFrom = false
+		culpritBase = nil
+	end
 	return best
 end
 
 local function stealStep()
+	updateTheftDetection()
+
 	local now = os.clock()
 	if now < stealCooldown then
 		return
 	end
+
 	if LocalPlayer:GetAttribute("Carrying") then
 		local nest = freeNest()
 		if nest then
@@ -837,7 +898,13 @@ local function stealStep()
 		return
 	end
 
-	local target = pickStolenPet()
+	-- Only infiltrate and steal if we have been stolen from!
+	if not wasStolenFrom or not culpritBase then
+		state.text = T.noTarget
+		return
+	end
+
+	local target = pickCulpritBestPet()
 	if not target then
 		state.text = T.noTarget
 		return
@@ -846,8 +913,9 @@ local function stealStep()
 	state.text = T.stealing
 	local position = promptPosition(target.prompt)
 	if position and teleport(position) then
-		safeWait(0.2)
-		local fired = firePrompt(target.prompt)
+		safeWait(0.15)
+		-- Instant steal by pressing 'E'
+		local fired = instantStealPrompt(target.prompt)
 		if not fired then
 			local owner = target.base:GetAttribute("Owner")
 			local player = owner and Players:FindFirstChild(owner)
@@ -858,10 +926,16 @@ local function stealStep()
 				fired = true
 			end
 		end
+
 		if fired then
 			stats.stolen += 1
-			stealCooldown = now + math.random(15, 30) / 10 -- Randomized humanized cooldown anti-detect buffer
+			stealCooldown = now + 2.5
 			log(string.format(T.logStolen, target.name, target.weight))
+			
+			-- Reset revenge trigger until next theft occurs
+			wasStolenFrom = false
+			culpritBase = nil
+
 			if Settings.returnHome then
 				local base = myBase()
 				if base then
@@ -1375,6 +1449,33 @@ local function buildUI()
 		end,
 	})
 
+	FarmMain:CreateDropdown({
+		Name = T.movementMode,
+		Desc = T.movementModeDesc,
+		Options = { "Tween", "Instant" },
+		CurrentOption = Settings.movementMode,
+		Flag = "MovementMode",
+		Callback = function(value)
+			local pick = type(value) == "table" and value[1] or value
+			if pick then
+				Settings.movementMode = tostring(pick)
+			end
+		end,
+	})
+
+	FarmMain:CreateSlider({
+		Name = T.tweenSpeed,
+		Desc = T.tweenSpeedDesc,
+		Range = { 50, 400 },
+		Increment = 5,
+		Suffix = " studs/s",
+		CurrentValue = Settings.tweenSpeed,
+		Flag = "TweenSpeed",
+		Callback = function(value)
+			Settings.tweenSpeed = value
+		end,
+	})
+
 	UiRefs.skipFake = FarmMain:CreateToggle({
 		Name = T.skipFake,
 		Desc = T.skipFakeDesc,
@@ -1519,45 +1620,6 @@ local function buildUI()
 		Callback = function(on)
 			Settings.steal = on
 			log(on and T.stealOn or T.stealOff)
-		end,
-	})
-
-	StealMain:CreateDropdown({
-		Name = T.stealMode,
-		Desc = T.stealModeDesc,
-		Options = { "Tween", "Instant" },
-		CurrentOption = Settings.stealMode,
-		Flag = "StealMode",
-		Callback = function(value)
-			local pick = type(value) == "table" and value[1] or value
-			if pick then
-				Settings.stealMode = tostring(pick)
-			end
-		end,
-	})
-
-	StealMain:CreateSlider({
-		Name = T.tweenSpeed,
-		Desc = T.tweenSpeedDesc,
-		Range = { 50, 400 },
-		Increment = 5,
-		Suffix = " studs/s",
-		CurrentValue = Settings.tweenSpeed,
-		Flag = "TweenSpeed",
-		Callback = function(value)
-			Settings.tweenSpeed = value
-		end,
-	})
-
-	StealMain:CreateSlider({
-		Name = T.minWeight,
-		Desc = T.minWeightDesc,
-		Range = { 0, 1000000 },
-		Increment = 100,
-		CurrentValue = Settings.minWeight,
-		Flag = "MinWeight",
-		Callback = function(value)
-			Settings.minWeight = value
 		end,
 	})
 
@@ -2002,7 +2064,7 @@ task.spawn(function()
 	while scriptAlive() do
 		local ok, err = xpcall(tick, debug.traceback)
 		if not ok then
-			warn("[RobScript.com] Tick failed: " + tostring(err))
+			warn("[RobScript.com] Tick failed: " .. tostring(err))
 		end
 		safeWait(0.35)
 	end
@@ -2023,4 +2085,4 @@ getgenv().__FakeEgg = {
 	sellKey = sellKey,
 }
 
-print("[RobScript.com] Fake an Egg Hub loaded with Anti-Detect Safeguards")
+print("[RobScript.com] Fake an Egg Hub loaded with Revenge Steal & Anti-Detect Safeguards")
